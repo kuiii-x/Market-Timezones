@@ -228,6 +228,22 @@
     .ad-config .two { display:flex; gap:8px; }
     .ad-config .two input { flex:1; }
     .ad-note { font-size:11px; color:var(--muted); margin-top:6px; }
+
+    /* Admin-only UI: hidden by default for everyone */
+    .admin-only { display: none !important; }
+    /* small admin badge / control (visible if JS enables admin) */
+    .admin-badge {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      background: rgba(0,0,0,0.6);
+      border: 1px solid var(--grid);
+      color: var(--muted);
+      padding: 6px 8px;
+      font-size: 12px;
+      border-radius: 8px;
+      z-index: 9999;
+    }
   </style>
 </head>
 <body>
@@ -235,8 +251,8 @@
   <h1>Trader Clock — Multi‑market time zones with news, volume, bids/sales</h1>
   <div class="sub">Align sessions to your timezone, see upcoming news as red dots, and overlay hourly volume + bids vs sales. Customize by strategy.</div>
 
-  <!-- Top ad placeholder -->
-  <div id="headerAd" class="ad-slot" aria-label="Top ad slot">Ad placeholder — configure under Settings → Ad Manager</div>
+  <!-- Top ad placeholder (admin-only) -->
+  <div id="headerAd" class="ad-slot admin-only" aria-label="Top ad slot">Ad placeholder — configure under Settings → Ad Manager (admin only)</div>
 </header>
 
 <div class="container">
@@ -287,11 +303,11 @@
     </div>
     <div class="alert" id="riskAlert" style="display:none"></div>
 
-    <!-- Sidebar ad placeholder -->
-    <div id="sidebarAd" class="ad-slot small" aria-label="Sidebar ad slot">Sidebar ad placeholder — configure Ad Manager</div>
+    <!-- Sidebar ad placeholder (admin-only) -->
+    <div id="sidebarAd" class="ad-slot small admin-only" aria-label="Sidebar ad slot">Sidebar ad placeholder — configure Ad Manager (admin only)</div>
 
-    <!-- Ad Manager -->
-    <div class="ad-config" id="adConfigPanel">
+    <!-- Ad Manager (admin-only) -->
+    <div class="ad-config admin-only" id="adConfigPanel">
       <h3 style="margin:0 0 8px 0;font-size:14px;color:var(--muted)">Ad Manager</h3>
       <label><input type="checkbox" id="enableAds" /> Enable ads</label>
       <label>Ad Provider Script URL (e.g. AdSense):</label>
@@ -321,7 +337,7 @@
         <button id="loadAds" class="secondary">Load/Apply Now</button>
         <button id="clearAds" class="secondary">Clear Ads</button>
       </div>
-      <div class="ad-note">Notes: For AdSense, put the script URL and your ca-pub value. For other providers paste raw HTML into the Raw ad HTML box. Ads are saved to localStorage only on this browser.</div>
+      <div class="ad-note">Notes: For AdSense, put the script URL and your ca-pub value. For other providers paste raw HTML into the Raw ad HTML box. Ads are saved to localStorage only on this browser[...]
     </div>
 
     <h2 class="section-title">Notes</h2>
@@ -345,14 +361,86 @@
       <span><span class="swatch" style="background:var(--danger)"></span>High-impact news</span>
     </div>
 
-    <!-- Inline ad placeholder (between legend and content) -->
-    <div id="inlineAd" class="ad-slot" aria-label="Inline ad slot">Inline ad placeholder — configure Ad Manager</div>
+    <!-- Inline ad placeholder (admin-only) -->
+    <div id="inlineAd" class="ad-slot admin-only" aria-label="Inline ad slot">Inline ad placeholder — configure Ad Manager (admin only)</div>
 
     <div id="marketsContainer"></div>
   </main>
 </div>
 
+<!-- small admin badge (will be toggled by JS when admin mode is detected) -->
+<div id="adminBadge" class="admin-badge" style="display:none">
+  Admin: visible only to you — <button id="adminLogoutBtn" style="margin-left:8px;padding:4px 6px">Logout</button>
+</div>
+
 <script>
+/* ========= Admin visibility helpers ========= */
+
+/*
+  How this works:
+  - By default, ad slots and the Ad Manager panel are hidden from everyone via the .admin-only class.
+  - To make them visible only to you, set a secret token. Two quick ways are provided:
+    1) Visit the site with ?admin=YOUR_SECRET (this sets a localStorage token for convenience).
+    2) Or set localStorage.traderClockAdmin = "YOUR_SECRET" manually in the console.
+  - Replace ADMIN_SECRET below with a secret value only you know.
+  - Once the token matches, the UI will show ad slots and the ad manager. Non-admin users never load the ad provider script.
+*/
+
+const ADMIN_SECRET = 'replace-with-a-long-random-secret-please'; // <-- set this to a secret only you know
+const ADMIN_STORAGE_KEY = 'trader-clock-admin-token';
+
+function checkAdminMode() {
+  try {
+    // 1) URL param ?admin=secret
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlToken = urlParams.get('admin');
+    if (urlToken && urlToken === ADMIN_SECRET) {
+      localStorage.setItem(ADMIN_STORAGE_KEY, urlToken);
+      // remove the query param from the URL to avoid leaking it in refs
+      if (window.history && window.history.replaceState) {
+        const u = new URL(window.location);
+        u.searchParams.delete('admin');
+        window.history.replaceState({}, document.title, u.pathname + u.search + u.hash);
+      }
+      return true;
+    }
+
+    // 2) Hash like #admin-secret (optional)
+    const hash = (window.location.hash || '').replace('#', '');
+    if (hash && hash === ADMIN_SECRET) {
+      localStorage.setItem(ADMIN_STORAGE_KEY, hash);
+      if (window.history && window.history.replaceState) {
+        const u = new URL(window.location);
+        u.hash = '';
+        window.history.replaceState({}, document.title, u.pathname + u.search + u.hash);
+      }
+      return true;
+    }
+
+    // 3) localStorage token
+    const stored = localStorage.getItem(ADMIN_STORAGE_KEY);
+    if (stored && stored === ADMIN_SECRET) return true;
+  } catch (e) {
+    console.warn('admin check failed', e);
+  }
+  return false;
+}
+
+function enableAdminUI(enable) {
+  const els = document.querySelectorAll('.admin-only');
+  els.forEach(el => {
+    el.style.display = enable ? '' : 'none';
+  });
+  const badge = document.getElementById('adminBadge');
+  if (badge) badge.style.display = enable ? '' : 'none';
+}
+
+function adminLogout() {
+  localStorage.removeItem(ADMIN_STORAGE_KEY);
+  // reload so everything re-initializes hidden
+  location.reload();
+}
+
 /* ========= Data & Utilities ========= */
 
 /* Ad manager state + helpers */
@@ -390,7 +478,8 @@ function clearAdConfig() {
   localStorage.removeItem(AD_STORAGE_KEY);
 }
 
-/* Insert provider script (async). If script already loaded (matching src) skip. */
+/* Insert provider script (async). If script already loaded (matching src) skip.
+   NOTE: we only load provider scripts when admin mode is active. */
 function loadProviderScriptOnce(src, dataAdClient) {
   if (!src) return Promise.resolve();
   const existing = Array.from(document.querySelectorAll('script')).find(s => s.src === src);
@@ -597,7 +686,13 @@ const riskAlert = document.getElementById('riskAlert');
 
 const marketsContainer = document.getElementById('marketsContainer');
 
+let IS_ADMIN = false;
+
 function init() {
+  // detect admin mode early and enable/disable admin UI before anything else runs
+  IS_ADMIN = checkAdminMode();
+  enableAdminUI(IS_ADMIN);
+
   // Populate timezone select
   tzSel.innerHTML = '';
   TZ_LIST.forEach(tz => {
@@ -652,8 +747,12 @@ function init() {
     highlightCurrentHours();
   }, 1000);
 
-  // Initialize Ad Manager UI from stored config
+  // Init Ad Manager UI from stored config (only if admin)
   initAdManager();
+
+  // admin logout button
+  const logoutBtn = document.getElementById('adminLogoutBtn');
+  if (logoutBtn) logoutBtn.addEventListener('click', adminLogout);
 
   render();
 }
@@ -767,7 +866,17 @@ function render() {
 
   // Also re-apply ad config (use latest saved config)
   const cfg = loadAdConfig();
-  applyAdConfig(cfg);
+  if (IS_ADMIN) {
+    applyAdConfig(cfg);
+  } else {
+    // ensure hidden placeholders don't attempt to show anything
+    const headerAd = document.getElementById('headerAd');
+    const sidebarAd = document.getElementById('sidebarAd');
+    const inlineAd = document.getElementById('inlineAd');
+    if (headerAd) headerAd.textContent = 'Ads hidden (admin only)';
+    if (sidebarAd) sidebarAd.textContent = 'Ads hidden (admin only)';
+    if (inlineAd) inlineAd.textContent = 'Ads hidden (admin only)';
+  }
 }
 
 function highlightCurrentHours() {
@@ -821,6 +930,13 @@ function initAdManager() {
 
   const adsenseFields = document.getElementById('adsenseFields');
   const otherFields = document.getElementById('otherProviderFields');
+
+  // If not admin, hide the panel and return early (no event listeners)
+  if (!IS_ADMIN) {
+    // ensure defaults in the elements (if present) are blank and hidden
+    if (document.getElementById('adConfigPanel')) document.getElementById('adConfigPanel').style.display = 'none';
+    return;
+  }
 
   // populate UI
   enableAds.checked = cfg.enabled;
