@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Trader Clock — Time zones, news dots, volume per time</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root {
+      --bg: #0b0f1a;
+      --panel: #12172a;
+      --text: #e6e9f2;
+      --muted: #9aa3b2;
+      --accent: #4cc9f0;
+      --accent2: #b5179e;
+      --success: #2bd47d;
+      --warning: #ffb703;
+      --danger: #ef233c;
+      --grid: #1e2742;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: linear-gradient(180deg, #091022, #0b0f1a);
+      color: var(--text);
+    }
+    header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--grid);
+      background: rgba(18, 23, 42, 0.7);
+      backdrop-filter: blur(8px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 {
+      margin: 0 0 8px 0;
+      font-size: 20px;
+      letter-spacing: 0.2px;
+    }
+    header .sub {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .container {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 16px;
+      padding: 16px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--grid);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .panel h2 {
+      margin: 0 0 8px 0;
+      font-size: 16px;
+    }
+    .panel:not(:first-child) .section-title {
+      margin-top: 8px;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin: 8px 0;
+      flex-wrap: wrap;
+    }
+    label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    select, input[type="time"], input[type="number"], input[type="text"], textarea, button {
+      background: #0d1326;
+      color: var(--text);
+      border: 1px solid var(--grid);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+      outline: none;
+    }
+    textarea { min-height:50px; width:100%; resize:vertical; }
+    button {
+      cursor: pointer;
+      border-color: transparent;
+      background: linear-gradient(90deg, var(--accent2), var(--accent));
+      font-weight: 600;
+    }
+    button.secondary {
+      background: #0d1326;
+      border: 1px solid var(--grid);
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--muted);
+      background: #0d1326;
+      border: 1px dashed var(--grid);
+      border-radius: 6px;
+      padding: 4px 8px;
+      margin-right: 6px;
+    }
+    .clock-grid {
+      display: grid;
+      grid-template-columns: repeat(24, 1fr);
+      gap: 2px;
+      margin: 12px 0 6px 0;
+    }
+    .hour-cell {
+      position: relative;
+      min-height: 28px;
+      border-radius: 6px;
+      background: #0d1326;
+      border: 1px solid var(--grid);
+      overflow: hidden;
+    }
+    .hour-cell.active {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px rgba(76, 201, 240, 0.3);
+    }
+    .hour-label {
+      position: absolute;
+      bottom: 2px;
+      left: 4px;
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .session-band {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 6px;
+      width: 100%;
+      background: var(--accent);
+      opacity: 0.2;
+    }
+    .volume-bar {
+      position: absolute;
+      bottom: 12px;
+      left: 0;
+      width: 100%;
+      height: 0;
+      background: linear-gradient(180deg, rgba(76,201,240,0.7), rgba(76,201,240,0.1));
+    }
+    .bids-sales {
+      position: absolute;
+      top: 8px;
+      left: 2px;
+      right: 2px;
+      height: 10px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px;
+    }
+    .bid {
+      background: rgba(43,212,125,0.6);
+      height: 100%;
+      width: 0%;
+    }
+    .sale {
+      background: rgba(239,35,60,0.6);
+      height: 100%;
+      width: 0%;
+    }
+    .news-dot {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--danger);
+      box-shadow: 0 0 0 2px rgba(239,35,60,0.2);
+      display: none;
+    }
+    .legend {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+    .legend .swatch {
+      width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 4px;
+    }
+    .market-row {
+      margin-bottom: 16px; border-bottom: 1px dashed var(--grid); padding-bottom: 12px;
+    }
+    .market-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+    }
+    .market-title {
+      font-size: 14px; font-weight: 600;
+    }
+    .current-time {
+      font-size: 12px; color: var(--muted);
+    }
+    .foot {
+      font-size: 11px; color: var(--muted); margin-top: 8px;
+    }
+    .alert {
+      background: #101636; border-left: 3px solid var(--warning); padding: 8px; border-radius: 8px; font-size: 12px; color: #e6e9f2;
+    }
+
+    /* Ad styles */
+    .ad-slot {
+      background: rgba(13,19,38,0.5);
+      border: 1px dashed var(--grid);
+      border-radius: 8px;
+      min-height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 13px;
+      margin: 8px 0;
+      padding: 8px;
+    }
+    .ad-slot.small { min-height: 40px; font-size: 12px; padding:6px; }
+    .ad-config { margin-top: 12px; border-top:1px dashed var(--grid); padding-top:12px; }
+    .ad-config label { display:block; width:100%; margin-bottom:6px; color:var(--muted); font-size:12px; }
+    .ad-config input[type="text"], .ad-config input[type="url"] { width:100%; }
+    .ad-config .two { display:flex; gap:8px; }
+    .ad-config .two input { flex:1; }
+    .ad-note { font-size:11px; color:var(--muted); margin-top:6px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Trader Clock — Multi‑market time zones with news, volume, bids/sales</h1>
+  <div class="sub">Align sessions to your timezone, see upcoming news as red dots, and overlay hourly volume + bids vs sales. Customize by strategy.</div>
+
+  <!-- Top ad placeholder -->
+  <div id="headerAd" class="ad-slot" aria-label="Top ad slot">Ad placeholder — configure under Settings → Ad Manager</div>
+</header>
+
+<div class="container">
+  <!-- Left controls -->
+  <aside class="panel">
+    <h2>Settings</h2>
+    <div class="row">
+      <label>Timezone</label>
+      <select id="timezoneSelect"></select>
+    </div>
+    <div class="row">
+      <label>Markets</label>
+      <select id="marketSelect" multiple size="6" style="width:100%">
+        <!-- Filled by JS -->
+      </select>
+    </div>
+    <div class="row">
+      <label>Instrument</label>
+      <select id="instrumentSelect">
+        <option value="ES">ES (S&P 500 futures)</option>
+        <option value="NQ">NQ (Nasdaq futures)</option>
+        <option value="6E">6E (EUR/USD futures)</option>
+        <option value="CL">CL (Crude Oil)</option>
+        <option value="BTCUSD">BTCUSD</option>
+        <option value="EURUSD">EUR/USD</option>
+        <option value="USDJPY">USD/JPY</option>
+      </select>
+    </div>
+    <div class="row">
+      <label>Strategy overlays</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%">
+        <label><input type="checkbox" id="overlaySession" checked /> Show session bands</label>
+        <label><input type="checkbox" id="overlayVolume" checked /> Hourly volume</label>
+        <label><input type="checkbox" id="overlayBidsSales" checked /> Bids vs sales</label>
+        <label><input type="checkbox" id="overlayNews" checked /> News red dots</label>
+      </div>
+    </div>
+    <div class="row">
+      <label>Session customize</label>
+      <input type="time" id="customSessionStart" value="09:00" />
+      <input type="time" id="customSessionEnd" value="17:00" />
+      <button id="applyCustom" class="secondary">Apply</button>
+    </div>
+    <div class="row">
+      <label>Alert: max daily loss %</label>
+      <input type="number" id="maxLoss" min="0" max="100" value="2" />
+      <button id="savePrefs">Save preferences</button>
+    </div>
+    <div class="alert" id="riskAlert" style="display:none"></div>
+
+    <!-- Sidebar ad placeholder -->
+    <div id="sidebarAd" class="ad-slot small" aria-label="Sidebar ad slot">Sidebar ad placeholder — configure Ad Manager</div>
+
+    <!-- Ad Manager -->
+    <div class="ad-config" id="adConfigPanel">
+      <h3 style="margin:0 0 8px 0;font-size:14px;color:var(--muted)">Ad Manager</h3>
+      <label><input type="checkbox" id="enableAds" /> Enable ads</label>
+      <label>Ad Provider Script URL (e.g. AdSense):</label>
+      <input type="url" id="adProviderUrl" placeholder="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js" />
+      <label>Provider type:
+        <select id="adProviderType">
+          <option value="adsense" selected>Google AdSense</option>
+          <option value="other">Other (paste ad HTML)</option>
+        </select>
+      </label>
+      <div id="adsenseFields">
+        <label>AdSense data-ad-client (ca-pub-...)</label>
+        <input type="text" id="adClient" placeholder="ca-pub-XXXXXXXXXXXXX" />
+        <label>Top slot id (data-ad-slot)</label>
+        <input type="text" id="adTopSlot" placeholder="1234567890" />
+        <label>Sidebar slot id</label>
+        <input type="text" id="adSidebarSlot" placeholder="2345678901" />
+        <label>Inline slot id</label>
+        <input type="text" id="adInlineSlot" placeholder="3456789012" />
+      </div>
+      <div id="otherProviderFields" style="display:none">
+        <label>Raw ad HTML (paste provider snippet you want inserted into each slot)</label>
+        <textarea id="adRawHtml" placeholder="&lt;div&gt;...ad snippet...&lt;/div&gt;"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="saveAds">Save Ads</button>
+        <button id="loadAds" class="secondary">Load/Apply Now</button>
+        <button id="clearAds" class="secondary">Clear Ads</button>
+      </div>
+      <div class="ad-note">Notes: For AdSense, put the script URL and your ca-pub value. For other providers paste raw HTML into the Raw ad HTML box. Ads are saved to localStorage only on this browser.</div>
+    </div>
+
+    <h2 class="section-title">Notes</h2>
+    <div class="foot">
+      - Red dots = scheduled high-impact news aligned to selected timezone.<br/>
+      - Volume, bids, sales are mock; wire to real APIs later.<br/>
+      - Choose multiple markets; scroll the right panel to compare.<br/>
+      - Your local time is auto-detected but can be overridden.
+    </div>
+  </aside>
+
+  <!-- Right display -->
+  <main class="panel" id="displayPanel">
+    <h2>Sessions and hourly overlays</h2>
+
+    <div class="legend">
+      <span><span class="swatch" style="background:rgba(76,201,240,0.5)"></span>Session band</span>
+      <span><span class="swatch" style="background:rgba(76,201,240,0.7)"></span>Volume</span>
+      <span><span class="swatch" style="background:rgba(43,212,125,0.6)"></span>Bids</span>
+      <span><span class="swatch" style="background:rgba(239,35,60,0.6)"></span>Sales</span>
+      <span><span class="swatch" style="background:var(--danger)"></span>High-impact news</span>
+    </div>
+
+    <!-- Inline ad placeholder (between legend and content) -->
+    <div id="inlineAd" class="ad-slot" aria-label="Inline ad slot">Inline ad placeholder — configure Ad Manager</div>
+
+    <div id="marketsContainer"></div>
+  </main>
+</div>
+
+<script>
+/* ========= Data & Utilities ========= */
+
+/* Ad manager state + helpers */
+const AD_STORAGE_KEY = 'trader-clock-ads-v1';
+
+const defaultAdConfig = {
+  enabled: false,
+  providerUrl: '',
+  providerType: 'adsense', // 'adsense' or 'other'
+  adClient: '',
+  adTopSlot: '',
+  adSidebarSlot: '',
+  adInlineSlot: '',
+  adRawHtml: ''
+};
+
+function loadAdConfig() {
+  try {
+    const raw = localStorage.getItem(AD_STORAGE_KEY);
+    if (!raw) return Object.assign({}, defaultAdConfig);
+    return Object.assign({}, defaultAdConfig, JSON.parse(raw));
+  } catch (e) {
+    console.warn('Failed to load ad config', e);
+    return Object.assign({}, defaultAdConfig);
+  }
+}
+function saveAdConfig(cfg) {
+  try {
+    localStorage.setItem(AD_STORAGE_KEY, JSON.stringify(cfg));
+  } catch (e) {
+    console.warn('Failed to save ad config', e);
+  }
+}
+function clearAdConfig() {
+  localStorage.removeItem(AD_STORAGE_KEY);
+}
+
+/* Insert provider script (async). If script already loaded (matching src) skip. */
+function loadProviderScriptOnce(src, dataAdClient) {
+  if (!src) return Promise.resolve();
+  const existing = Array.from(document.querySelectorAll('script')).find(s => s.src === src);
+  if (existing) {
+    // update data-ad-client attribute if needed
+    if (dataAdClient) existing.setAttribute('data-ad-client', dataAdClient);
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.async = true;
+    s.src = src;
+    if (dataAdClient) s.setAttribute('data-ad-client', dataAdClient);
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Failed to load ad provider script: ' + src));
+    document.head.appendChild(s);
+  });
+}
+
+/* Render ad content into the slot element based on config */
+function renderAdIntoSlot(slotEl, position, cfg) {
+  slotEl.innerHTML = ''; // wipe placeholder
+  if (!cfg.enabled) {
+    slotEl.textContent = 'Ads disabled (enable via Ad Manager)';
+    return;
+  }
+  if (cfg.providerType === 'adsense') {
+    // Build AdSense ins block if ad slot id present for this position
+    const slotId = position === 'top' ? cfg.adTopSlot : position === 'sidebar' ? cfg.adSidebarSlot : cfg.adInlineSlot;
+    const client = cfg.adClient;
+    if (!slotId || !client) {
+      slotEl.textContent = 'AdSense not fully configured: set data-ad-client and slot id.';
+      return;
+    }
+    const ins = document.createElement('ins');
+    ins.className = 'adsbygoogle';
+    ins.style.display = 'block';
+    ins.setAttribute('data-ad-client', client);
+    ins.setAttribute('data-ad-slot', slotId);
+    ins.setAttribute('data-ad-format', 'auto');
+    ins.setAttribute('data-full-width-responsive', 'true');
+    slotEl.appendChild(ins);
+
+    // Attempt to push adsbygoogle if available
+    try {
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch (e) {
+      // provider script not yet loaded or other error; ignore silently
+      console.warn('adsbygoogle push failed — provider script maybe not loaded yet');
+    }
+    return;
+  }
+
+  // other provider: insert raw HTML (if present)
+  if (cfg.adRawHtml && cfg.adRawHtml.trim().length) {
+    slotEl.innerHTML = cfg.adRawHtml;
+    return;
+  }
+
+  slotEl.textContent = 'No ad HTML provided for this provider; paste the ad snippet in Ad Manager.';
+}
+
+/* Apply ad config: load script and render into header/side/inline placeholders */
+async function applyAdConfig(cfg) {
+  const headerAd = document.getElementById('headerAd');
+  const sidebarAd = document.getElementById('sidebarAd');
+  const inlineAd = document.getElementById('inlineAd');
+
+  // Reset placeholders while loading
+  headerAd.textContent = 'Loading ad...';
+  sidebarAd.textContent = 'Loading ad...';
+  inlineAd.textContent = 'Loading ad...';
+
+  if (!cfg.enabled) {
+    // just show disabled message
+    renderAdIntoSlot(headerAd, 'top', cfg);
+    renderAdIntoSlot(sidebarAd, 'sidebar', cfg);
+    renderAdIntoSlot(inlineAd, 'inline', cfg);
+    return;
+  }
+
+  try {
+    if (cfg.providerUrl) {
+      await loadProviderScriptOnce(cfg.providerUrl, cfg.adClient);
+    }
+  } catch (e) {
+    console.warn(e);
+    // show an error-like fallback
+    headerAd.textContent = 'Failed to load ad provider script. Check URL.';
+    sidebarAd.textContent = 'Failed to load ad provider script. Check URL.';
+    inlineAd.textContent = 'Failed to load ad provider script. Check URL.';
+    return;
+  }
+
+  // Render into slots
+  renderAdIntoSlot(headerAd, 'top', cfg);
+  renderAdIntoSlot(sidebarAd, 'sidebar', cfg);
+  renderAdIntoSlot(inlineAd, 'inline', cfg);
+}
+
+/* ========= Existing app code (unchanged, aside from calling ad helpers) ========= */
+
+const TZ_LIST = Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone') : [
+  'UTC','America/New_York','America/Los_Angeles','Europe/London','Europe/Berlin','Asia/Tokyo','Australia/Sydney'
+];
+
+const DEFAULT_MARKETS = [
+  // id, name, tz, openLocal (HH:mm in market local), closeLocal (HH:mm in market local)
+  { id: 'NY', name: 'New York (NYSE)', tz: 'America/New_York', open: '09:30', close: '16:00' },
+  { id: 'LDN', name: 'London', tz: 'Europe/London', open: '08:00', close: '16:30' },
+  { id: 'TKY', name: 'Tokyo', tz: 'Asia/Tokyo', open: '09:00', close: '15:00' },
+  { id: 'SYD', name: 'Sydney', tz: 'Australia/Sydney', open: '10:00', close: '16:00' },
+  { id: 'CHI', name: 'Chicago (CME Globex core)', tz: 'America/Chicago', open: '08:30', close: '15:00' },
+  { id: 'HK', name: 'Hong Kong', tz: 'Asia/Hong_Kong', open: '09:30', close: '16:00' },
+];
+
+// Mock high-impact news schedule (hour-level granularity, local time alignment later)
+const MOCK_NEWS = [
+  { instrument: 'USD', markets: ['NY','LDN'], localHour: 13, label: 'NFP' },
+  { instrument: 'USD', markets: ['NY'], localHour: 14, label: 'CPI' },
+  { instrument: 'EUR', markets: ['LDN'], localHour: 11, label: 'ECB Presser' },
+  { instrument: 'JPY', markets: ['TKY'], localHour: 10, label: 'BoJ Statement' },
+  { instrument: 'AUD', markets: ['SYD'], localHour: 2, label: 'RBA Rate' },
+];
+
+function genHourlyData(seed = 1) {
+  const arr = [];
+  for (let h = 0; h < 24; h++) {
+    const base = Math.sin((h + seed) * 0.4) * 0.5 + 0.5; // 0..1
+    const vol = Math.floor(300 + base * 1700); // 300..2000
+    const bidRatio = 0.35 + Math.abs(Math.sin(h * 0.23 + seed)) * 0.5; // 0.35..0.85
+    const bids = Math.floor(vol * bidRatio);
+    const sales = Math.max(0, vol - bids);
+    arr.push({ hour: h, volume: vol, bids, sales });
+  }
+  return arr;
+}
+
+function convertHourBetweenTimezones(fromHour, fromTZ, toTZ) {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  const date = now.getUTCDate();
+
+  const fmtFrom = new Intl.DateTimeFormat('en-US', { timeZone: fromTZ, hour: '2-digit', hour12: false });
+  const fmtTo = new Intl.DateTimeFormat('en-US', { timeZone: toTZ, hour: '2-digit', hour12: false });
+
+  for (let u = 0; u < 24; u++) {
+    const utc = new Date(Date.UTC(year, month, date, u, 0, 0, 0));
+    const parsedFrom = parseInt(fmtFrom.format(utc), 10);
+    if (parsedFrom === fromHour) {
+      return parseInt(fmtTo.format(utc), 10);
+    }
+  }
+  return null;
+}
+
+function localizeSession(openStr, closeStr, marketTZ, userTZ) {
+  const [oH, oM] = openStr.split(':').map(Number);
+  const [cH, cM] = closeStr.split(':').map(Number);
+
+  const openHourUser = convertHourBetweenTimezones(oH, marketTZ, userTZ);
+  const closeHourUser = convertHourBetweenTimezones(cH, marketTZ, userTZ);
+
+  return {
+    openHour: openHourUser !== null ? openHourUser : oH,
+    closeHour: closeHourUser !== null ? closeHourUser : cH,
+    openMin: oM,
+    closeMin: cM
+  };
+}
+
+function hhLabel(h) { return h.toString().padStart(2, '0') + ':00'; }
+function nowInTZ(tz) {
+  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+  return fmt.format(new Date());
+}
+
+const state = {
+  userTZ: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles',
+  markets: DEFAULT_MARKETS.map(m => m.id),
+  instrument: 'ES',
+  overlays: { session: true, volume: true, bidsSales: true, news: true },
+  customSession: { enabled: false, start: '09:00', end: '17:00' },
+  prefs: { maxLossPct: 2 },
+  hourlyDataSeed: 7
+};
+
+const tzSel = document.getElementById('timezoneSelect');
+const marketSel = document.getElementById('marketSelect');
+const instrSel = document.getElementById('instrumentSelect');
+
+const overlaySession = document.getElementById('overlaySession');
+const overlayVolume = document.getElementById('overlayVolume');
+const overlayBidsSales = document.getElementById('overlayBidsSales');
+const overlayNews = document.getElementById('overlayNews');
+
+const customStart = document.getElementById('customSessionStart');
+const customEnd = document.getElementById('customSessionEnd');
+const applyCustomBtn = document.getElementById('applyCustom');
+const savePrefsBtn = document.getElementById('savePrefs');
+const maxLossInput = document.getElementById('maxLoss');
+const riskAlert = document.getElementById('riskAlert');
+
+const marketsContainer = document.getElementById('marketsContainer');
+
+function init() {
+  // Populate timezone select
+  tzSel.innerHTML = '';
+  TZ_LIST.forEach(tz => {
+    const opt = document.createElement('option');
+    opt.value = tz; opt.textContent = tz;
+    if (tz === state.userTZ) opt.selected = true;
+    tzSel.appendChild(opt);
+  });
+
+  // Fill markets
+  marketSel.innerHTML = '';
+  DEFAULT_MARKETS.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m.id; opt.textContent = `${m.name} (${m.tz})`;
+    if (state.markets.includes(m.id)) opt.selected = true;
+    marketSel.appendChild(opt);
+  });
+
+  // Events for core app
+  tzSel.addEventListener('change', () => { state.userTZ = tzSel.value; render(); });
+  marketSel.addEventListener('change', () => {
+    state.markets = Array.from(marketSel.selectedOptions).map(o => o.value);
+    render();
+  });
+  instrSel.addEventListener('change', () => { state.instrument = instrSel.value; render(); });
+
+  overlaySession.addEventListener('change', () => { state.overlays.session = overlaySession.checked; render(); });
+  overlayVolume.addEventListener('change', () => { state.overlays.volume = overlayVolume.checked; render(); });
+  overlayBidsSales.addEventListener('change', () => { state.overlays.bidsSales = overlayBidsSales.checked; render(); });
+  overlayNews.addEventListener('change', () => { state.overlays.news = overlayNews.checked; render(); });
+
+  applyCustomBtn.addEventListener('click', () => {
+    const s = customStart.value; const e = customEnd.value;
+    state.customSession = { enabled: true, start: s, end: e };
+    render();
+  });
+
+  savePrefsBtn.addEventListener('click', () => {
+    state.prefs.maxLossPct = Number(maxLossInput.value || 0);
+    riskAlert.style.display = 'block';
+    riskAlert.textContent = `Preferences saved. Max daily loss alert set to ${state.prefs.maxLossPct}%`;
+    setTimeout(() => riskAlert.style.display = 'none', 3000);
+  });
+
+  // Live clock updates
+  setInterval(() => {
+    const timeEls = document.querySelectorAll('[data-tz]');
+    timeEls.forEach(el => {
+      const tz = el.getAttribute('data-tz');
+      el.textContent = `Local: ${nowInTZ(state.userTZ)} | Market: ${nowInTZ(tz)}`;
+    });
+    highlightCurrentHours();
+  }, 1000);
+
+  // Initialize Ad Manager UI from stored config
+  initAdManager();
+
+  render();
+}
+
+function getMarketById(id) { return DEFAULT_MARKETS.find(m => m.id === id); }
+
+function render() {
+  marketsContainer.innerHTML = '';
+  const hourlyData = genHourlyData(state.hourlyDataSeed);
+
+  state.markets.forEach(id => {
+    const m = getMarketById(id);
+    if (!m) return;
+
+    const block = document.createElement('div');
+    block.className = 'market-row';
+
+    const header = document.createElement('div');
+    header.className = 'market-header';
+
+    const title = document.createElement('div');
+    title.className = 'market-title';
+    title.textContent = `${m.name} — ${state.instrument}`;
+    header.appendChild(title);
+
+    const time = document.createElement('div');
+    time.className = 'current-time';
+    time.setAttribute('data-tz', m.tz);
+    time.textContent = `Local: ${nowInTZ(state.userTZ)} | Market: ${nowInTZ(m.tz)}`;
+    header.appendChild(time);
+    block.appendChild(header);
+
+    // Clock grid
+    const grid = document.createElement('div');
+    grid.className = 'clock-grid';
+
+    const session = state.customSession.enabled
+      ? localizeSession(state.customSession.start, state.customSession.end, state.userTZ, state.userTZ)
+      : localizeSession(m.open, m.close, m.tz, state.userTZ);
+
+    for (let h = 0; h < 24; h++) {
+      const cell = document.createElement('div');
+      cell.className = 'hour-cell';
+      cell.dataset.hour = h;
+
+      // Label
+      const label = document.createElement('div');
+      label.className = 'hour-label';
+      label.textContent = hhLabel(h);
+      cell.appendChild(label);
+
+      // Session band
+      if (state.overlays.session) {
+        const inSession = isHourBetween(h, session.openHour, session.closeHour);
+        if (inSession) {
+          const band = document.createElement('div');
+          band.className = 'session-band';
+          cell.appendChild(band);
+        }
+      }
+
+      // Volume
+      if (state.overlays.volume) {
+        const vol = hourlyData[h].volume;
+        const height = Math.min(100, Math.round((vol / 2000) * 100));
+        const v = document.createElement('div');
+        v.className = 'volume-bar';
+        v.style.height = height + '%';
+        cell.appendChild(v);
+      }
+
+      // Bids vs Sales
+      if (state.overlays.bidsSales) {
+        const bidsPct = pct(hourlyData[h].bids, hourlyData[h].volume);
+        const salesPct = pct(hourlyData[h].sales, hourlyData[h].volume);
+        const bs = document.createElement('div');
+        bs.className = 'bids-sales';
+        const bid = document.createElement('div');
+        bid.className = 'bid';
+        bid.style.width = Math.round(bidsPct) + '%';
+        const sale = document.createElement('div');
+        sale.className = 'sale';
+        sale.style.width = Math.round(salesPct) + '%';
+        bs.appendChild(bid); bs.appendChild(sale);
+        cell.appendChild(bs);
+      }
+
+      // News dot
+      if (state.overlays.news) {
+        const dot = document.createElement('div');
+        dot.className = 'news-dot';
+        const hasNews = newsAtHour(id, state.instrument, h, state.userTZ);
+        dot.style.display = hasNews ? 'block' : 'none';
+        cell.appendChild(dot);
+      }
+
+      grid.appendChild(cell);
+    }
+
+    block.appendChild(grid);
+    // Legend footnote per market
+    const foot = document.createElement('div');
+    foot.className = 'foot';
+    foot.textContent = `Session shown for ${state.customSession.enabled ? 'custom hours' : m.name} aligned to your timezone (${state.userTZ}).`;
+    block.appendChild(foot);
+
+    marketsContainer.appendChild(block);
+  });
+
+  highlightCurrentHours();
+
+  // Also re-apply ad config (use latest saved config)
+  const cfg = loadAdConfig();
+  applyAdConfig(cfg);
+}
+
+function highlightCurrentHours() {
+  const now = new Date();
+  const localHour = new Intl.DateTimeFormat('en-US', { timeZone: state.userTZ, hour: '2-digit', hour12:false }).format(now);
+  const h = parseInt(localHour, 10);
+
+  const cells = document.querySelectorAll('.hour-cell');
+  cells.forEach(c => c.classList.remove('active'));
+  const todays = document.querySelectorAll(`.hour-cell[data-hour="${h}"]`);
+  todays.forEach(c => c.classList.add('active'));
+}
+
+function isHourBetween(h, startH, endH) {
+  if (startH <= endH) return h >= startH && h < endH;
+  return h >= startH || h < endH;
+}
+
+function pct(part, total) {
+  return total <= 0 ? 0 : (part / total) * 100;
+}
+
+function newsAtHour(marketId, instrument, localHour, userTZ) {
+  const map = {
+    ES: 'USD', NQ: 'USD', '6E': 'EUR', CL: 'USD',
+    BTCUSD: 'USD', EURUSD: 'EUR', USDJPY: 'USD'
+  };
+  const cur = map[instrument] || 'USD';
+
+  return MOCK_NEWS.some(n => {
+    if (n.instrument !== cur) return false;
+    if (!n.markets.includes(marketId)) return false;
+    const market = getMarketById(marketId);
+    if (!market) return false;
+    const converted = convertHourBetweenTimezones(n.localHour, market.tz, userTZ);
+    return converted === localHour;
+  });
+}
+
+/* ========= Ad Manager UI init & events ========= */
+function initAdManager() {
+  const cfg = loadAdConfig();
+  const enableAds = document.getElementById('enableAds');
+  const providerUrl = document.getElementById('adProviderUrl');
+  const providerType = document.getElementById('adProviderType');
+  const adClient = document.getElementById('adClient');
+  const adTopSlot = document.getElementById('adTopSlot');
+  const adSidebarSlot = document.getElementById('adSidebarSlot');
+  const adInlineSlot = document.getElementById('adInlineSlot');
+  const adRawHtml = document.getElementById('adRawHtml');
+
+  const adsenseFields = document.getElementById('adsenseFields');
+  const otherFields = document.getElementById('otherProviderFields');
+
+  // populate UI
+  enableAds.checked = cfg.enabled;
+  providerUrl.value = cfg.providerUrl;
+  providerType.value = cfg.providerType || 'adsense';
+  adClient.value = cfg.adClient || '';
+  adTopSlot.value = cfg.adTopSlot || '';
+  adSidebarSlot.value = cfg.adSidebarSlot || '';
+  adInlineSlot.value = cfg.adInlineSlot || '';
+  adRawHtml.value = cfg.adRawHtml || '';
+
+  function updateProviderUI() {
+    if (providerType.value === 'adsense') {
+      adsenseFields.style.display = '';
+      otherFields.style.display = 'none';
+    } else {
+      adsenseFields.style.display = 'none';
+      otherFields.style.display = '';
+    }
+  }
+  providerType.addEventListener('change', updateProviderUI);
+  updateProviderUI();
+
+  document.getElementById('saveAds').addEventListener('click', () => {
+    const newCfg = {
+      enabled: enableAds.checked,
+      providerUrl: providerUrl.value.trim(),
+      providerType: providerType.value,
+      adClient: adClient.value.trim(),
+      adTopSlot: adTopSlot.value.trim(),
+      adSidebarSlot: adSidebarSlot.value.trim(),
+      adInlineSlot: adInlineSlot.value.trim(),
+      adRawHtml: adRawHtml.value
+    };
+    saveAdConfig(newCfg);
+    applyAdConfig(newCfg);
+    alert('Ad configuration saved.');
+  });
+
+  document.getElementById('loadAds').addEventListener('click', () => {
+    const newCfg = loadAdConfig();
+    applyAdConfig(newCfg);
+    alert('Ad config applied (from saved config).');
+  });
+
+  document.getElementById('clearAds').addEventListener('click', () => {
+    if (!confirm('Clear saved ad configuration?')) return;
+    clearAdConfig();
+    const empty = Object.assign({}, defaultAdConfig);
+    enableAds.checked = empty.enabled;
+    providerUrl.value = '';
+    adClient.value = '';
+    adTopSlot.value = '';
+    adSidebarSlot.value = '';
+    adInlineSlot.value = '';
+    adRawHtml.value = '';
+    applyAdConfig(empty);
+    alert('Ad configuration cleared.');
+  });
+
+  // Apply at init if enabled
+  if (cfg.enabled) {
+    applyAdConfig(cfg);
+  } else {
+    applyAdConfig(cfg);
+  }
+}
+
+/* ========= Boot ========= */
+init();
+</script>
+</body>
+</html>
